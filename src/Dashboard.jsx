@@ -39,12 +39,28 @@ function expandData(raw) {
       expectedDelivery = new Date(reqPickup.getTime() + slaMins * 60000);
     }
     
+    // Parse attempt timestamps (comma-separated ISO strings in the "at" field)
+    const attempts = (d.at || '').split(',').map(s => s.trim()).filter(Boolean).map(s => new Date(s)).filter(dt => !isNaN(dt.getTime()));
+    const attemptCount = attempts.length;
+    const firstAttemptTime = attempts.length > 0 ? attempts.reduce((a, b) => a < b ? a : b) : null;
+
     // Calculate if late
     let isLate = false;
     let delayMins = 0;
     if (actualDrop && expectedDelivery) {
       delayMins = (actualDrop - expectedDelivery) / 60000;
       isLate = delayMins > 0;
+    }
+
+    // If late based on actual drop, check if first attempt was within SLA
+    // If the attempt was created within the SLA deadline, the booking counts as "On Time"
+    let attemptWithinSLA = false;
+    if (isLate && firstAttemptTime && expectedDelivery) {
+      attemptWithinSLA = firstAttemptTime <= expectedDelivery;
+      if (attemptWithinSLA) {
+        isLate = false;
+        delayMins = 0;
+      }
     }
     
     // Booking to pickup time
@@ -86,6 +102,10 @@ function expandData(raw) {
       requestedPickup: d.rp,
       dropActual: d.dra,
       attempted: d.at,
+      attempts,
+      attemptCount,
+      firstAttemptTime,
+      attemptWithinSLA: d.s === 'Dropped Off' ? attemptWithinSLA : false,
       customer,
       slaMins,
       expectedDelivery,
@@ -307,7 +327,7 @@ function BookingModal({ booking, notes, onClose, onAddNote, onAssignReason }) {
               {b.speed}
             </span>
             {b.isLate && <span style={{ padding: '4px 12px', borderRadius: 16, fontSize: 12, fontWeight: 700, background: Z2U.melon, color: Z2U.white }}>+{formatMins(b.delayMins).substring(1)}</span>}
-            {b.isOnTime && <span style={{ padding: '4px 12px', borderRadius: 16, fontSize: 12, fontWeight: 700, background: Z2U.green, color: Z2U.white }}>On time</span>}
+            {b.isOnTime && <span style={{ padding: '4px 12px', borderRadius: 16, fontSize: 12, fontWeight: 700, background: Z2U.green, color: Z2U.white }}>{b.attemptWithinSLA ? 'On time (attempt)' : 'On time'}</span>}
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
               <X size={20} color={Z2U.grey} />
             </button>
@@ -334,7 +354,15 @@ function BookingModal({ booking, notes, onClose, onAddNote, onAssignReason }) {
             <DetailCell label="Booking → Pickup" value={b.bookingToPickup !== null ? formatMins(b.bookingToPickup) : '—'} />
             <DetailCell label="Pickup → Delivery" value={b.pickupToDeliveryMins !== null ? formatMins(b.pickupToDeliveryMins) : '—'} />
           </div>
-          
+          {b.attemptCount > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
+              <DetailCell label="Attempts" value={b.attemptCount} />
+              <DetailCell label="First attempt" value={b.firstAttemptTime ? formatTime(b.firstAttemptTime.toISOString()) : '—'} />
+              <DetailCell label="Attempt within SLA" value={b.attemptWithinSLA ? 'Yes' : 'No'} valueColor={b.attemptWithinSLA ? Z2U.green : Z2U.melon} />
+              <DetailCell label="" value="" />
+            </div>
+          )}
+
           {/* Addresses */}
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: Z2U.blue, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Pickup address</div>
@@ -743,7 +771,7 @@ function BookingTable({ bookings, onSelect }) {
                 <td style={{ padding: '10px 12px', color: Z2U.grey }}>{b.distanceKm} km</td>
                 <td style={{ padding: '10px 12px', color: Z2U.grey, whiteSpace: 'nowrap' }}>{b.speed === 'Same day' ? 'By drop' : formatSLA(b.slaMins)}</td>
                 <td style={{ padding: '10px 12px' }}>
-                  {b.isOnTime && <span style={{ color: Z2U.green, fontWeight: 600 }}>On time</span>}
+                  {b.isOnTime && <span style={{ color: Z2U.green, fontWeight: 600 }}>{b.attemptWithinSLA ? 'On time (attempt)' : 'On time'}</span>}
                   {b.isLate && <span style={{ color: Z2U.melon, fontWeight: 600 }}>Late</span>}
                   {!b.isOnTime && !b.isLate && <span style={{ color: '#9CA3AF' }}>{b.status}</span>}
                 </td>

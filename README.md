@@ -1,61 +1,93 @@
 # Droppoint Performance Dashboard
 
-## Quick Setup
+DIFOT (Delivered In Full On Time) analytics dashboard for Zoom2u Droppoint deliveries.
 
-### 1. Publish your Google Sheet
+## Features
 
-1. Open your Google Sheet with the booking data
-2. Go to **File → Share → Publish to web**
-3. In the dropdown, select the **correct tab** (the one with your data)
-4. Change format from "Web page" to **CSV**
-5. Click **Publish**
-6. Copy the URL it gives you
+- **Overview** — KPIs, DIFOT by state, delivery status pie chart, state performance table
+- **Active Bookings** — Live delivery tracking with status, progress, courier details
+- **Delivery History** — Full searchable/filterable history with expanded details showing:
+  - Booking time, SLA, requested/actual pickup times, expected/actual delivery times
+  - Delay breakdown, courier, distance, notes
+- **By Speed** — VIP / 3 Hour / Same Day performance + distance breakdown
+- **By Pickup** — Breakdown by pickup location (Fuji locations highlighted with summary)
+- **By Driver** — Late analysis per courier with DIFOT ranking, avg delay, timing metrics
+- **Timing Analysis** — Booking→Pickup and Pickup→Delivery time analysis with:
+  - Distribution charts, speed breakdowns, DIFOT correlation, per-driver timing
+- **Time of Day** — DIFOT by day of week and hour of day
+- **Delays** — Severity categories, distance breakdown, detailed drill-down
 
-### 2. Add the URL to the code
+## Data Sources
 
-Open `src/dashboard.jsx` and find this line near the top:
+The dashboard attempts to load data from Google Sheets CSV. If unavailable, it falls back to realistic generated demo data.
 
-```js
-const GOOGLE_SHEET_CSV_URL = 'YOUR_GOOGLE_SHEET_CSV_URL_HERE';
+### Google Sheets Configuration
+
+Update these URLs in `src/Dashboard.jsx`:
+
+```javascript
+const GOOGLE_SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/.../pub?output=csv';
+const GOOGLE_SHEET_NOTES_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/.../pub?output=csv';
 ```
 
-Replace `YOUR_GOOGLE_SHEET_CSV_URL_HERE` with your published CSV URL.
+**Publishing your sheet:**
+1. Open your Google Sheet
+2. Go to File → Share → Publish to web
+3. Select the bookings tab → CSV format → Publish
+4. Repeat for the notes tab
 
-### 3. Deploy to Vercel
+### Expected CSV Columns (Bookings)
 
-1. Push all files to your GitHub repo
-2. Go to [vercel.com](https://vercel.com) and sign in with GitHub
-3. Click **Add New Project** → select your repo
-4. Vercel auto-detects Vite — just click **Deploy**
-5. Your dashboard is live!
+| Column | Description |
+|--------|-------------|
+| Booking Ref | Unique booking reference (e.g. Z202501271234567) |
+| PO | Purchase order number |
+| Courier | Courier/driver name |
+| Pickup Address | Origin address |
+| Drop Address | Destination address |
+| Date | Booking date (YYYY-MM-DD or DD/MM/YYYY) |
+| State | Australian state (NSW, VIC, QLD, WA, SA, ACT) |
+| Speed | Service type (VIP, 3 hour, Same day) |
+| Distance | Distance category (0-30km, 30.01-50km, 50.01+km) |
+| On Time | Whether delivered on time (true/false, Y/N, 1/0) |
+| Overdue Mins | Minutes past SLA (0 = on time) |
+| Booking Time | Time booking was created (HH:MM) |
+| Requested Pickup Time | Requested collection time (HH:MM) |
+| Actual Pickup Time | When courier actually collected (HH:MM) |
+| SLA Minutes | Expected SLA in minutes (e.g. 90, 180) |
+| Expected Delivery Time | SLA deadline time (HH:MM) |
+| Actual Delivery Time | When delivery was completed (HH:MM) |
+| Booking to Pickup | Minutes from booking to pickup |
+| Pickup to Delivery | Minutes from pickup to delivery |
 
-### To update data
+### Expected CSV Columns (Notes)
 
-Just update the Google Sheet — the dashboard reads from it each time it loads.
+| Column | Description |
+|--------|-------------|
+| Booking Ref | Reference to link note to booking |
+| Note | The note text |
 
-## Local Development
+## Setup
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Expected Google Sheet Columns
+Open http://localhost:3000
 
-| Column | Type | Example |
-|--------|------|---------|
-| booking_ref | text | Z2025012712345 |
-| po | text | LENO00123456 |
-| courier | text | Michael Chen |
-| pickup_address | text | Dock 26, 2 Millennium Court... |
-| drop_address | text | 242 Parramatta Rd, Homebush NSW |
-| date | date (YYYY-MM-DD) | 2025-01-27 |
-| state | text | NSW |
-| speed | text | VIP / 3 hour / Same day |
-| distance_km | number | 24.5 |
-| on_time | boolean | TRUE / FALSE |
-| overdue_mins | number | 0 (if on time) or 45 |
-| hour | number | 9 (24hr format) |
-| status | text | delivered |
-| customer_price_ex_gst | number | 45.50 |
-| customer_price_inc_gst | number | 50.05 |
+## Build for Production
+
+```bash
+npm run build
+```
+
+Output goes to `dist/` folder.
+
+## Tech Stack
+
+- React 18 + Vite
+- Recharts (charts)
+- Lucide React (icons)
+- PapaParse (CSV parsing)
+- Zoom2u brand design system

@@ -50,16 +50,43 @@ function getDistanceCategory(km) {
 // - VIP: on time if DropActual <= RequestedDropDateTime
 //   OR if DropActual is within distance-based window from RequestedPickupDateTime:
 //     0-30km = 90 mins, 30.01-50km = 120 mins, 50.01+km = 150 mins
-function calculateDifot(speed, distanceKm, dropActual, requestedDrop, requestedPickup) {
-  if (!dropActual) return { on_time: false, overdue_mins: 0 };
-  
+// - Attempt rule: if the first attempt was created within the SLA deadline,
+//   the booking counts as "On Time" regardless of actual drop time
+function calculateDifot(speed, distanceKm, dropActual, requestedDrop, requestedPickup, attemptedStr) {
+  if (!dropActual) return { on_time: false, overdue_mins: 0, attempt_within_sla: false, attempt_count: 0, first_attempt_time: null };
+
   const actual = new Date(dropActual);
   const deadline = new Date(requestedDrop);
-  
-  if (isNaN(actual.getTime()) || isNaN(deadline.getTime())) return { on_time: false, overdue_mins: 0 };
+
+  if (isNaN(actual.getTime()) || isNaN(deadline.getTime())) return { on_time: false, overdue_mins: 0, attempt_within_sla: false, attempt_count: 0, first_attempt_time: null };
+
+  // Parse attempt timestamps (comma-separated ISO strings)
+  const attempts = (attemptedStr || '').split(',').map(s => s.trim()).filter(Boolean).map(s => new Date(s)).filter(dt => !isNaN(dt.getTime()));
+  const attemptCount = attempts.length;
+  const firstAttemptTime = attempts.length > 0 ? attempts.reduce((a, b) => a < b ? a : b) : null;
+
+  // Calculate the SLA deadline for attempt checking
+  let slaDeadline = deadline; // default: requested drop time
+  if (speed === 'VIP' && requestedPickup) {
+    const pickup = new Date(requestedPickup);
+    if (!isNaN(pickup.getTime())) {
+      let allowedMins = 90;
+      if (distanceKm > 50) allowedMins = 150;
+      else if (distanceKm > 30) allowedMins = 120;
+      const vipDeadline = new Date(pickup.getTime() + allowedMins * 60 * 1000);
+      // Use the later of the two deadlines
+      if (vipDeadline > slaDeadline) slaDeadline = vipDeadline;
+    }
+  } else if (speed === '3 hour' && requestedPickup) {
+    const pickup = new Date(requestedPickup);
+    if (!isNaN(pickup.getTime())) {
+      const threeHrDeadline = new Date(pickup.getTime() + 180 * 60 * 1000);
+      if (threeHrDeadline > slaDeadline) slaDeadline = threeHrDeadline;
+    }
+  }
 
   // Check standard rule: delivered before requested drop time
-  if (actual <= deadline) return { on_time: true, overdue_mins: 0 };
+  if (actual <= deadline) return { on_time: true, overdue_mins: 0, attempt_within_sla: false, attempt_count: attemptCount, first_attempt_time: firstAttemptTime };
 
   // For VIP: also check distance-based window from requested pickup
   if (speed === 'VIP' && requestedPickup) {
@@ -68,15 +95,20 @@ function calculateDifot(speed, distanceKm, dropActual, requestedDrop, requestedP
       let allowedMins = 90; // 0-30km default
       if (distanceKm > 50) allowedMins = 150;
       else if (distanceKm > 30) allowedMins = 120;
-      
+
       const vipDeadline = new Date(pickup.getTime() + allowedMins * 60 * 1000);
-      if (actual <= vipDeadline) return { on_time: true, overdue_mins: 0 };
+      if (actual <= vipDeadline) return { on_time: true, overdue_mins: 0, attempt_within_sla: false, attempt_count: attemptCount, first_attempt_time: firstAttemptTime };
     }
+  }
+
+  // Check attempt rule: if first attempt was within the SLA deadline, count as on time
+  if (firstAttemptTime && firstAttemptTime <= slaDeadline) {
+    return { on_time: true, overdue_mins: 0, attempt_within_sla: true, attempt_count: attemptCount, first_attempt_time: firstAttemptTime };
   }
 
   // It's late — calculate overdue minutes from the requested drop time
   const overdue_mins = Math.round((actual - deadline) / (1000 * 60));
-  return { on_time: false, overdue_mins: Math.max(0, overdue_mins) };
+  return { on_time: false, overdue_mins: Math.max(0, overdue_mins), attempt_within_sla: false, attempt_count: attemptCount, first_attempt_time: firstAttemptTime };
 }
 
 // Parse a row from the Google Sheet CSV into our booking object
@@ -90,13 +122,15 @@ function parseBookingRow(row) {
   const poUpper = po.toUpperCase();
   const client = (poUpper.startsWith('FBAU') || poUpper.startsWith('ANC')) ? 'Fuji' : 'Droppoint';
 
-  // Calculate DIFOT from timestamps
-  const { on_time, overdue_mins } = calculateDifot(
+  // Calculate DIFOT from timestamps (including attempt data)
+  const attemptedStr = (row.attempted || '').trim();
+  const { on_time, overdue_mins, attempt_within_sla, attempt_count, first_attempt_time } = calculateDifot(
     speed,
     distance_km,
     (row.drop_actual || '').trim(),
     (row.requested_drop || '').trim(),
-    (row.requested_pickup || '').trim()
+    (row.requested_pickup || '').trim(),
+    attemptedStr
   );
 
   return {
@@ -118,6 +152,10 @@ function parseBookingRow(row) {
     drop_actual: (row.drop_actual || '').trim(),
     requested_drop: (row.requested_drop || '').trim(),
     requested_pickup: (row.requested_pickup || '').trim(),
+    attempted: attemptedStr,
+    attempt_count,
+    first_attempt_time,
+    attempt_within_sla,
     notes: []
   };
 }
@@ -342,6 +380,23 @@ const DelayedBookingsPopup = ({ bookings, onClose, title }) => {
                             <span style={{ color: Z2U.grey, fontSize: '14px', fontWeight: 600 }}>{booking.distance_km}km ({booking.distance})</span>
                           </div>
                         </div>
+                        {booking.attempt_count > 0 && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                                <Clock size={14} color={Z2U.grey400} /><span style={{ color: Z2U.grey400, fontSize: '11px', textTransform: 'uppercase' }}>Attempts</span>
+                              </div>
+                              <span style={{ color: Z2U.grey, fontSize: '14px', fontWeight: 600 }}>{booking.attempt_count}</span>
+                            </div>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                                <Clock size={14} color={Z2U.grey400} /><span style={{ color: Z2U.grey400, fontSize: '11px', textTransform: 'uppercase' }}>First attempt</span>
+                              </div>
+                              <span style={{ color: Z2U.grey, fontSize: '14px', fontWeight: 600 }}>{booking.first_attempt_time ? new Date(booking.first_attempt_time).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}</span>
+                              {booking.attempt_within_sla && <span style={{ marginLeft: '8px', background: Z2U.green, color: Z2U.white, padding: '2px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: 700 }}>Within SLA</span>}
+                            </div>
+                          </div>
+                        )}
                         <div style={{ marginTop: '16px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
                             <MapPin size={14} color={Z2U.grey400} /><span style={{ color: Z2U.grey400, fontSize: '11px', textTransform: 'uppercase' }}>Drop address</span>
@@ -852,7 +907,7 @@ export default function Dashboard() {
                         <div>
                           {booking.on_time ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#4da832', fontSize: '12px', fontWeight: 700 }}>
-                              <CheckCircle size={14} /> On time
+                              <CheckCircle size={14} /> {booking.attempt_within_sla ? 'On time (attempt)' : 'On time'}
                             </span>
                           ) : (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: Z2U.melon, fontSize: '12px', fontWeight: 700 }}>
@@ -887,6 +942,22 @@ export default function Dashboard() {
                               <p style={{ color: Z2U.grey, fontSize: '14px', fontWeight: 600, margin: 0 }}>{formatHour(booking.hour)}</p>
                             </div>
                           </div>
+                          {booking.attempt_count > 0 && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '16px' }}>
+                              <div>
+                                <p style={{ color: Z2U.grey400, fontSize: '11px', textTransform: 'uppercase', margin: '0 0 4px', fontWeight: 600 }}>Attempts</p>
+                                <p style={{ color: Z2U.grey, fontSize: '14px', fontWeight: 600, margin: 0 }}>{booking.attempt_count}</p>
+                              </div>
+                              <div>
+                                <p style={{ color: Z2U.grey400, fontSize: '11px', textTransform: 'uppercase', margin: '0 0 4px', fontWeight: 600 }}>First attempt</p>
+                                <p style={{ color: Z2U.grey, fontSize: '14px', fontWeight: 600, margin: 0 }}>
+                                  {booking.first_attempt_time ? new Date(booking.first_attempt_time).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}
+                                  {booking.attempt_within_sla && <span style={{ marginLeft: '8px', background: Z2U.green, color: Z2U.white, padding: '2px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: 700 }}>Within SLA</span>}
+                                </p>
+                              </div>
+                              <div></div>
+                            </div>
+                          )}
                           <div>
                             <p style={{ color: Z2U.grey400, fontSize: '11px', textTransform: 'uppercase', margin: '0 0 4px', fontWeight: 600 }}>Drop-off address</p>
                             <p style={{ color: Z2U.grey, fontSize: '13px', margin: 0 }}>{booking.drop_address}</p>
@@ -896,7 +967,7 @@ export default function Dashboard() {
                     </div>
                   );
                 })}
-                
+
                 {/* Pagination */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: Z2U.grey50 }}>
                   <span style={{ color: Z2U.grey400, fontSize: '13px' }}>

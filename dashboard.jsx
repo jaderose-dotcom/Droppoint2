@@ -15,7 +15,7 @@ import Papa from 'papaparse';
 // The URL should look like:
 // https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/pub?gid=0&single=true&output=csv
 // ============================================================
-const GOOGLE_SHEET_CSV_URL = 'YOUR_GOOGLE_SHEET_CSV_URL_HERE';
+const GOOGLE_SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSZtC7Pdyd3JxmOAkNuoGT5LlbPt79Lg8qEYQbzN78rXqr3KSXoMJhcoUan2jsk2cTaBXepar2TEvzB/pub?output=csv';
 const DASHBOARD_PASSWORD = 'droppoint2026'; // Change this to your preferred password
 // ============================================================
 

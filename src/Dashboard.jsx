@@ -190,7 +190,7 @@ const LATE_REASONS = [
   'FBAU Requested Change of Address/ETA/SLA',
   'Missing or Incorrect Order Details',
   'Driver Held Up at Delivery Site',
-  'Delayed Departure from Pickup Site',
+
   'Delivery Rejected / Driver Access Issues',
   'Damaged on Dispatch',
   'Delay at Pickup',
@@ -211,7 +211,7 @@ const LATE_REASON_DESCRIPTIONS = {
   'FBAU Requested Change of Address/ETA/SLA': 'FBAU requested a change of address, updated ETA, or updated SLA.',
   'Missing or Incorrect Order Details': 'Incorrect information on consignment resulting in incorrect, inaccurate, or delayed delivery.',
   'Driver Held Up at Delivery Site': 'Driver held up or left waiting at handover point for receiver.',
-  'Delayed Departure from Pickup Site': 'Driver delayed or held up at pickup location resulting in late delivery.',
+
   'Delivery Rejected / Driver Access Issues': 'Driver experienced issues at delivery point such as security restrictions, receiver unavailable, or access constraints.',
   'Damaged on Dispatch': 'Damaged by FBAU or DBS during processing.',
   'Delay at Pickup': 'Relating to FBAU or DBS delays in handover to Droppoint.',
@@ -1068,8 +1068,19 @@ export default function Dashboard() {
     });
   }, [allData, currentMonth, customer]);
   
-  const activeCount = filteredData.filter(d => d.status !== 'Dropped Off' && d.status !== '' && d.status !== 'Tried to deliver').length;
-  const delayCount = filteredData.filter(d => d.status === 'Dropped Off' && d.isLate).length;
+  // Apply "Marked as Not Late" overrides from notes
+  const adjustedData = useMemo(() => {
+    const notLateRefs = new Set(
+      notes.filter(n => n.note === 'Marked as Not Late').map(n => n.bookingRef)
+    );
+    if (notLateRefs.size === 0) return filteredData;
+    return filteredData.map(d =>
+      notLateRefs.has(d.bookingRef) ? { ...d, isLate: false, isOnTime: true, delayMins: 0 } : d
+    );
+  }, [filteredData, notes]);
+
+  const activeCount = adjustedData.filter(d => d.status !== 'Dropped Off' && d.status !== '' && d.status !== 'Tried to deliver').length;
+  const delayCount = adjustedData.filter(d => d.status === 'Dropped Off' && d.isLate).length;
   
   const handleAddNote = useCallback(async (bookingRef, noteText) => {
     const newNote = {
@@ -1148,18 +1159,18 @@ export default function Dashboard() {
       
       {/* Content */}
       <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto' }}>
-        {activeTab === 'overview' && <OverviewTab data={filteredData} notes={notes} onViewLate={(title, bookings) => setLateDrawer({ title, bookings })} onSelectBooking={setSelectedBooking} />}
-        {activeTab === 'active' && <ActiveBookingsTab data={filteredData} onSelectBooking={setSelectedBooking} />}
-        {(activeTab === 'history' || activeTab === 'speed') && <DeliveryHistoryTab data={filteredData} onSelectBooking={setSelectedBooking} />}
-        {activeTab === 'pickup' && <ByPickupTab data={filteredData} onSelectBooking={setSelectedBooking} />}
-        {activeTab === 'driver' && <ByDriverTab data={filteredData} onSelectBooking={setSelectedBooking} />}
-        {activeTab === 'timing' && <TimingAnalysisTab data={filteredData} />}
-        {activeTab === 'delays' && <DelaysTab data={filteredData} notes={notes} onSelectBooking={setSelectedBooking} />}
+        {activeTab === 'overview' && <OverviewTab data={adjustedData} notes={notes} onViewLate={(title, bookings) => setLateDrawer({ title, bookings })} onSelectBooking={setSelectedBooking} />}
+        {activeTab === 'active' && <ActiveBookingsTab data={adjustedData} onSelectBooking={setSelectedBooking} />}
+        {(activeTab === 'history' || activeTab === 'speed') && <DeliveryHistoryTab data={adjustedData} onSelectBooking={setSelectedBooking} />}
+        {activeTab === 'pickup' && <ByPickupTab data={adjustedData} onSelectBooking={setSelectedBooking} />}
+        {activeTab === 'driver' && <ByDriverTab data={adjustedData} onSelectBooking={setSelectedBooking} />}
+        {activeTab === 'timing' && <TimingAnalysisTab data={adjustedData} />}
+        {activeTab === 'delays' && <DelaysTab data={adjustedData} notes={notes} onSelectBooking={setSelectedBooking} />}
       </div>
       
       {/* Footer */}
       <div style={{ padding: '16px 24px', textAlign: 'center', fontSize: 12, color: '#9CA3AF' }}>
-        Showing {filteredData.length} bookings for {currentMonth ? new Date(currentMonth + '-01').toLocaleDateString('en-AU', { month: 'long', year: 'numeric' }) : 'all time'}
+        Showing {adjustedData.length} bookings for {currentMonth ? new Date(currentMonth + '-01').toLocaleDateString('en-AU', { month: 'long', year: 'numeric' }) : 'all time'}
       </div>
       
       {/* Modals */}

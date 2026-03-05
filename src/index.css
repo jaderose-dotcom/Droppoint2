@@ -12,7 +12,6 @@ body {
   color: #4B5054;
 }
 
-/* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -31,7 +30,6 @@ body {
   background: #9CA3AF;
 }
 
-/* Smooth transitions */
 button {
   transition: all 0.15s ease;
 }
@@ -48,9 +46,4 @@ input:focus {
 select:focus {
   outline: none;
   border-color: #00A7E2;
-}
-
-/* Table row hover */
-table tbody tr:hover {
-  background: #F5F6F7;
 }

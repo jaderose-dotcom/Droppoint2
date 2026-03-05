@@ -183,7 +183,7 @@ function MonthNavigator({ months, currentMonth, onChange }) {
 }
 
 // ─── Booking Detail Modal ───
-function BookingModal({ booking, notes, onClose, onAddNote, onAssignReason }) {
+function BookingModal({ booking, notes, onClose, onAddNote, onAssignReason, onRemoveNote, userName, onSetUserName }) {
   const [newNote, setNewNote] = useState('');
   const [showReasons, setShowReasons] = useState(false);
   if (!booking) return null;
@@ -280,6 +280,20 @@ function BookingModal({ booking, notes, onClose, onAddNote, onAssignReason }) {
             </div>
           )}
           
+          {/* Marked as Not Late - Undo */}
+          {bookingNotes.some(n => n.note === 'Marked as Not Late') && (
+            <div style={{ marginBottom: 20, padding: '10px 14px', background: Z2U.green + '10', borderRadius: 10, border: `1px solid ${Z2U.green}30`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: Z2U.green }}>✓ Marked as Not Late</span>
+              <button onClick={() => onRemoveNote(b.bookingRef, 'Marked as Not Late')}
+                style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${Z2U.melon}`, background: 'transparent', color: Z2U.melon, cursor: 'pointer', fontSize: 12, fontWeight: 600, transition: 'all 0.15s' }}
+                onMouseOver={e => { e.currentTarget.style.background = Z2U.melon; e.currentTarget.style.color = Z2U.white; }}
+                onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = Z2U.melon; }}
+              >
+                Undo
+              </button>
+            </div>
+          )}
+
           {/* Notes */}
           <div style={{ borderTop: `1px solid ${Z2U.medGrey}`, paddingTop: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Notes</div>
@@ -293,6 +307,11 @@ function BookingModal({ booking, notes, onClose, onAddNote, onAssignReason }) {
                 ))}
               </div>
             )}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <input value={userName} onChange={e => { onSetUserName(e.target.value); }} placeholder="Your name"
+                style={{ width: 140, padding: '10px 14px', borderRadius: 8, border: `1px solid ${Z2U.medGrey}`, fontSize: 13, outline: 'none' }}
+              />
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <input value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Add a note..."
                 style={{ flex: 1, padding: '10px 14px', borderRadius: 8, border: `1px solid ${Z2U.medGrey}`, fontSize: 13, outline: 'none' }}
@@ -932,6 +951,17 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [lateDrawer, setLateDrawer] = useState(null);
+  const [userName, setUserName] = useState('');
+
+  // Load persisted username on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const existing = await window.storage.get('dashboard-username');
+        if (existing) setUserName(existing.value);
+      } catch {}
+    })();
+  }, []);
   
   // Filter data
   const filteredData = useMemo(() => {
@@ -949,11 +979,11 @@ export default function Dashboard() {
     const newNote = {
       bookingRef,
       note: noteText,
-      author: 'User',
+      author: userName || 'User',
       timestamp: new Date().toISOString(),
     };
     setNotes(prev => [...prev, newNote]);
-    
+
     // Write to storage for persistence
     try {
       const existing = await window.storage.get('dashboard-notes');
@@ -963,6 +993,28 @@ export default function Dashboard() {
     } catch (e) {
       console.log('Storage not available, note saved in session only');
     }
+  }, [userName]);
+
+  const handleRemoveNote = useCallback((bookingRef, noteText) => {
+    setNotes(prev => {
+      const idx = prev.findIndex(n => n.bookingRef === bookingRef && n.note === noteText);
+      if (idx === -1) return prev;
+      const updated = [...prev];
+      updated.splice(idx, 1);
+      return updated;
+    });
+    // Also remove from storage
+    (async () => {
+      try {
+        const existing = await window.storage.get('dashboard-notes');
+        const stored = existing ? JSON.parse(existing.value) : [];
+        const idx = stored.findIndex(n => n.bookingRef === bookingRef && n.note === noteText);
+        if (idx !== -1) {
+          stored.splice(idx, 1);
+          await window.storage.set('dashboard-notes', JSON.stringify(stored));
+        }
+      } catch (e) { /* storage not available */ }
+    })();
   }, []);
   
   const handleAssignReason = useCallback((bookingRef, reason) => {
@@ -1054,7 +1106,7 @@ export default function Dashboard() {
       
       {/* Modals */}
       {selectedBooking && (
-        <BookingModal booking={selectedBooking} notes={notes} onClose={() => setSelectedBooking(null)} onAddNote={handleAddNote} onAssignReason={handleAssignReason} />
+        <BookingModal booking={selectedBooking} notes={notes} onClose={() => setSelectedBooking(null)} onAddNote={handleAddNote} onAssignReason={handleAssignReason} onRemoveNote={handleRemoveNote} userName={userName} onSetUserName={(name) => { setUserName(name); window.storage.set('dashboard-username', name).catch(() => {}); }} />
       )}
       {lateDrawer && (
         <LateDrawer title={lateDrawer.title} bookings={lateDrawer.bookings} notes={notes} onClose={() => setLateDrawer(null)} onSelect={(b) => { setLateDrawer(null); setSelectedBooking(b); }} />

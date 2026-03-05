@@ -183,8 +183,11 @@ function MonthNavigator({ months, currentMonth, onChange }) {
 }
 
 // ─── Booking Detail Modal ───
-function BookingModal({ booking, notes, onClose, onAddNote, onAssignReason, onRemoveNote, userName, onSetUserName }) {
+function BookingModal({ booking, notes, onClose, onAddNote, onAssignReason, onDeleteNote }) {
   const [newNote, setNewNote] = useState('');
+  const [authorName, setAuthorName] = useState(() => {
+    try { return localStorage.getItem('droppoint-author-name') || ''; } catch(e) { return ''; }
+  });
   const [showReasons, setShowReasons] = useState(false);
   if (!booking) return null;
   
@@ -194,6 +197,20 @@ function BookingModal({ booking, notes, onClose, onAddNote, onAssignReason, onRe
   const expectedDel = b.expectedDelivery;
   
   const bookingNotes = notes.filter(n => n.bookingRef === b.bookingRef);
+  const isMarkedNotLate = bookingNotes.some(n => n.note === 'Marked as Not Late');
+  const lateReasonNote = bookingNotes.find(n => n.note.startsWith('Late Reason:'));
+  
+  const saveAuthorName = (name) => {
+    setAuthorName(name);
+    try { localStorage.setItem('droppoint-author-name', name); } catch(e) {}
+  };
+  
+  const submitNote = () => {
+    if (newNote.trim() && authorName.trim()) {
+      onAddNote(b.bookingRef, newNote.trim(), authorName.trim());
+      setNewNote('');
+    }
+  };
   
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={onClose}>
@@ -209,8 +226,8 @@ function BookingModal({ booking, notes, onClose, onAddNote, onAssignReason, onRe
             <span style={{ padding: '4px 12px', borderRadius: 16, fontSize: 12, fontWeight: 700, background: b.speed === 'VIP' ? Z2U.melon : b.speed === '3 hour' ? Z2U.blue : Z2U.yellow, color: Z2U.white }}>
               {b.speed}
             </span>
-            {b.isLate && <span style={{ padding: '4px 12px', borderRadius: 16, fontSize: 12, fontWeight: 700, background: Z2U.melon, color: Z2U.white }}>+{formatMins(b.delayMins).substring(1)}</span>}
-            {b.isOnTime && <span style={{ padding: '4px 12px', borderRadius: 16, fontSize: 12, fontWeight: 700, background: Z2U.green, color: Z2U.white }}>On time</span>}
+            {b.isLate && !isMarkedNotLate && <span style={{ padding: '4px 12px', borderRadius: 16, fontSize: 12, fontWeight: 700, background: Z2U.melon, color: Z2U.white }}>+{formatMins(b.delayMins).substring(1)}</span>}
+            {(b.isOnTime || isMarkedNotLate) && <span style={{ padding: '4px 12px', borderRadius: 16, fontSize: 12, fontWeight: 700, background: Z2U.green, color: Z2U.white }}>{isMarkedNotLate ? 'Marked not late' : 'On time'}</span>}
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
               <X size={20} color={Z2U.grey} />
             </button>
@@ -252,11 +269,40 @@ function BookingModal({ booking, notes, onClose, onAddNote, onAssignReason, onRe
           {b.isLate && (
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: Z2U.melon, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Late reason</div>
-              {!showReasons ? (
+              
+              {/* Show assigned reason if exists */}
+              {lateReasonNote && (
+                <div style={{ padding: '10px 14px', background: Z2U.melon + '10', borderRadius: 8, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: Z2U.melon }}>{lateReasonNote.note.replace('Late Reason: ', '')}</span>
+                  <button onClick={() => { if (onDeleteNote && lateReasonNote.id) onDeleteNote(lateReasonNote.id); }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#9CA3AF', textDecoration: 'underline' }}>
+                    Change
+                  </button>
+                </div>
+              )}
+              
+              {/* Show "Marked as Not Late" with undo */}
+              {isMarkedNotLate && (
+                <div style={{ padding: '10px 14px', background: Z2U.green + '10', borderRadius: 8, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: Z2U.green }}>✓ Marked as not late</span>
+                  <button onClick={() => {
+                    const notLateNote = bookingNotes.find(n => n.note === 'Marked as Not Late');
+                    if (onDeleteNote && notLateNote && notLateNote.id) onDeleteNote(notLateNote.id);
+                  }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: '#9CA3AF', textDecoration: 'underline' }}>
+                    Undo
+                  </button>
+                </div>
+              )}
+              
+              {/* Show reason picker if no reason assigned and not marked not-late */}
+              {!lateReasonNote && !isMarkedNotLate && !showReasons && (
                 <button onClick={() => setShowReasons(true)} style={{ padding: '8px 16px', borderRadius: 8, border: `1px dashed ${Z2U.melon}`, background: 'transparent', color: Z2U.melon, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                   Assign late reason
                 </button>
-              ) : (
+              )}
+              
+              {showReasons && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 280, overflowY: 'auto', paddingRight: 4 }}>
                   {LATE_REASONS.map(reason => (
                     <button key={reason} onClick={() => { onAssignReason(b.bookingRef, reason); setShowReasons(false); }}
@@ -268,7 +314,7 @@ function BookingModal({ booking, notes, onClose, onAddNote, onAssignReason, onRe
                       {LATE_REASON_DESCRIPTIONS[reason] && <span style={{ fontSize: 11, color: '#9CA3AF', lineHeight: 1.3 }}>{LATE_REASON_DESCRIPTIONS[reason]}</span>}
                     </button>
                   ))}
-                  <button onClick={() => { onAddNote(b.bookingRef, 'Marked as Not Late'); setShowReasons(false); }}
+                  <button onClick={() => { onAddNote(b.bookingRef, 'Marked as Not Late', authorName.trim() || 'User'); setShowReasons(false); }}
                     style={{ padding: '8px 14px', borderRadius: 10, border: `1px solid ${Z2U.green}`, background: Z2U.green + '10', color: Z2U.green, cursor: 'pointer', fontSize: 12, fontWeight: 600, textAlign: 'left', transition: 'all 0.15s', marginTop: 4 }}
                     onMouseOver={e => { e.currentTarget.style.background = Z2U.green; e.currentTarget.style.color = Z2U.white; }}
                     onMouseOut={e => { e.currentTarget.style.background = Z2U.green + '10'; e.currentTarget.style.color = Z2U.green; }}
@@ -280,48 +326,36 @@ function BookingModal({ booking, notes, onClose, onAddNote, onAssignReason, onRe
             </div>
           )}
           
-          {/* Marked as Not Late - Undo */}
-          {bookingNotes.some(n => n.note === 'Marked as Not Late') && (
-            <div style={{ marginBottom: 20, padding: '10px 14px', background: Z2U.green + '10', borderRadius: 10, border: `1px solid ${Z2U.green}30`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: Z2U.green }}>✓ Marked as Not Late</span>
-              <button onClick={() => onRemoveNote(b.bookingRef, 'Marked as Not Late')}
-                style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${Z2U.melon}`, background: 'transparent', color: Z2U.melon, cursor: 'pointer', fontSize: 12, fontWeight: 600, transition: 'all 0.15s' }}
-                onMouseOver={e => { e.currentTarget.style.background = Z2U.melon; e.currentTarget.style.color = Z2U.white; }}
-                onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = Z2U.melon; }}
-              >
-                Undo
-              </button>
-            </div>
-          )}
-
           {/* Notes */}
           <div style={{ borderTop: `1px solid ${Z2U.medGrey}`, paddingTop: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Notes</div>
             {bookingNotes.length > 0 && (
               <div style={{ marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {bookingNotes.map((n, i) => (
-                  <div key={i} style={{ padding: '10px 14px', background: Z2U.lightGrey, borderRadius: 8, fontSize: 13 }}>
+                  <div key={n.id || i} style={{ padding: '10px 14px', background: Z2U.lightGrey, borderRadius: 8, fontSize: 13 }}>
                     <div style={{ color: Z2U.grey, fontWeight: 500 }}>{n.note}</div>
                     <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>{n.author} · {formatDateTime(n.timestamp)}</div>
                   </div>
                 ))}
               </div>
             )}
+            {/* Name field */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-              <input value={userName} onChange={e => { onSetUserName(e.target.value); }} placeholder="Your name"
-                style={{ width: 140, padding: '10px 14px', borderRadius: 8, border: `1px solid ${Z2U.medGrey}`, fontSize: 13, outline: 'none' }}
-              />
+              <input value={authorName} onChange={e => saveAuthorName(e.target.value)} placeholder="Your name"
+                style={{ width: 160, padding: '10px 14px', borderRadius: 8, border: `1px solid ${Z2U.medGrey}`, fontSize: 13, outline: 'none' }} />
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <input value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Add a note..."
                 style={{ flex: 1, padding: '10px 14px', borderRadius: 8, border: `1px solid ${Z2U.medGrey}`, fontSize: 13, outline: 'none' }}
-                onKeyDown={e => { if (e.key === 'Enter' && newNote.trim()) { onAddNote(b.bookingRef, newNote.trim()); setNewNote(''); }}}
+                onKeyDown={e => { if (e.key === 'Enter') submitNote(); }}
               />
-              <button onClick={() => { if (newNote.trim()) { onAddNote(b.bookingRef, newNote.trim()); setNewNote(''); }}}
-                style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: Z2U.blue, color: Z2U.white, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+              <button onClick={submitNote}
+                disabled={!newNote.trim() || !authorName.trim()}
+                style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: (!newNote.trim() || !authorName.trim()) ? Z2U.medGrey : Z2U.blue, color: Z2U.white, cursor: (!newNote.trim() || !authorName.trim()) ? 'default' : 'pointer', fontWeight: 600, fontSize: 13 }}>
                 Add Note
               </button>
             </div>
+            {!authorName.trim() && <div style={{ fontSize: 11, color: Z2U.melon, marginTop: 4 }}>Please enter your name to add notes</div>}
           </div>
         </div>
       </div>
@@ -944,24 +978,13 @@ function DelaysTab({ data, notes, onSelectBooking }) {
 
 // ─── Main Dashboard ───
 export default function Dashboard() {
-  const { deliveries: allData, notes, lastSync, loading, error, addNote, removeNote } = useDeliveryData();
+  const { deliveries: allData, notes, lastSync, loading, error, addNote, deleteNote } = useDeliveryData();
   const months = useMemo(() => getMonthOptions(allData), [allData]);
   const [currentMonth, setCurrentMonth] = useState(months[months.length - 1] || '');
   const [customer, setCustomer] = useState('All');
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [lateDrawer, setLateDrawer] = useState(null);
-  const [userName, setUserName] = useState('');
-
-  // Load persisted username on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const existing = await window.storage.get('dashboard-username');
-        if (existing) setUserName(existing.value);
-      } catch {}
-    })();
-  }, []);
   
   // Filter data
   const filteredData = useMemo(() => {
@@ -971,36 +994,21 @@ export default function Dashboard() {
       return monthMatch && custMatch;
     });
   }, [allData, currentMonth, customer]);
-
-  // Adjust data for "Marked as Not Late" overrides
-  const adjustedData = useMemo(() => {
-    const notLateRefs = new Set(
-      notes.filter(n => n.note === 'Marked as Not Late').map(n => n.bookingRef)
-    );
-    if (notLateRefs.size === 0) return filteredData;
-    return filteredData.map(d => {
-      if (notLateRefs.has(d.bookingRef) && d.isLate) {
-        return { ...d, isLate: false, isOnTime: true, delayMins: 0 };
-      }
-      return d;
-    });
-  }, [filteredData, notes]);
-
-  const activeCount = adjustedData.filter(d => d.status !== 'Dropped Off' && d.status !== '' && d.status !== 'Tried to deliver').length;
-  const delayCount = adjustedData.filter(d => d.status === 'Dropped Off' && d.isLate).length;
   
-  const handleAddNote = useCallback(async (bookingRef, noteText) => {
-    await addNote(bookingRef, noteText, userName || 'User');
-  }, [addNote, userName]);
-
-  const handleRemoveNote = useCallback(async (bookingRef, noteText) => {
-    await removeNote(bookingRef, noteText);
-  }, [removeNote]);
+  const activeCount = filteredData.filter(d => d.status !== 'Dropped Off' && d.status !== '' && d.status !== 'Tried to deliver').length;
+  const delayCount = filteredData.filter(d => d.status === 'Dropped Off' && d.isLate).length;
+  
+  const handleAddNote = useCallback(async (bookingRef, noteText, author) => {
+    await addNote(bookingRef, noteText, author || 'User');
+  }, [addNote]);
+  
+  const handleDeleteNote = useCallback(async (noteId) => {
+    await deleteNote(noteId);
+  }, [deleteNote]);
   
   const handleAssignReason = useCallback((bookingRef, reason) => {
     handleAddNote(bookingRef, `Late Reason: ${reason}`);
   }, [handleAddNote]);
-  
   
   const tabs = [
     { id: 'overview', label: 'Overview', icon: '📊' },
@@ -1055,24 +1063,24 @@ export default function Dashboard() {
       
       {/* Content */}
       <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto' }}>
-        {activeTab === 'overview' && <OverviewTab data={adjustedData} notes={notes} onViewLate={(title, bookings) => setLateDrawer({ title, bookings })} onSelectBooking={setSelectedBooking} />}
-        {activeTab === 'active' && <ActiveBookingsTab data={adjustedData} onSelectBooking={setSelectedBooking} />}
-        {(activeTab === 'history' || activeTab === 'speed') && <DeliveryHistoryTab data={adjustedData} onSelectBooking={setSelectedBooking} />}
-        {activeTab === 'pickup' && <ByPickupTab data={adjustedData} onSelectBooking={setSelectedBooking} />}
-        {activeTab === 'driver' && <ByDriverTab data={adjustedData} onSelectBooking={setSelectedBooking} />}
-        {activeTab === 'timing' && <TimingAnalysisTab data={adjustedData} />}
-        {activeTab === 'delays' && <DelaysTab data={adjustedData} notes={notes} onSelectBooking={setSelectedBooking} />}
+        {activeTab === 'overview' && <OverviewTab data={filteredData} notes={notes} onViewLate={(title, bookings) => setLateDrawer({ title, bookings })} onSelectBooking={setSelectedBooking} />}
+        {activeTab === 'active' && <ActiveBookingsTab data={filteredData} onSelectBooking={setSelectedBooking} />}
+        {(activeTab === 'history' || activeTab === 'speed') && <DeliveryHistoryTab data={filteredData} onSelectBooking={setSelectedBooking} />}
+        {activeTab === 'pickup' && <ByPickupTab data={filteredData} onSelectBooking={setSelectedBooking} />}
+        {activeTab === 'driver' && <ByDriverTab data={filteredData} onSelectBooking={setSelectedBooking} />}
+        {activeTab === 'timing' && <TimingAnalysisTab data={filteredData} />}
+        {activeTab === 'delays' && <DelaysTab data={filteredData} notes={notes} onSelectBooking={setSelectedBooking} />}
       </div>
       
       {/* Footer */}
       <div style={{ padding: '16px 24px', textAlign: 'center', fontSize: 12, color: '#9CA3AF' }}>
-        Showing {adjustedData.length} bookings for {currentMonth ? new Date(currentMonth + '-01').toLocaleDateString('en-AU', { month: 'long', year: 'numeric' }) : 'all time'}
+        Showing {filteredData.length} bookings for {currentMonth ? new Date(currentMonth + '-01').toLocaleDateString('en-AU', { month: 'long', year: 'numeric' }) : 'all time'}
         {lastSync && <span> · Last synced: {new Date(lastSync.completed_at).toLocaleString('en-AU')}</span>}
       </div>
       
       {/* Modals */}
       {selectedBooking && (
-        <BookingModal booking={selectedBooking} notes={notes} onClose={() => setSelectedBooking(null)} onAddNote={handleAddNote} onAssignReason={handleAssignReason} onRemoveNote={handleRemoveNote} userName={userName} onSetUserName={(name) => { setUserName(name); window.storage.set('dashboard-username', name).catch(() => {}); }} />
+        <BookingModal booking={selectedBooking} notes={notes} onClose={() => setSelectedBooking(null)} onAddNote={handleAddNote} onAssignReason={handleAssignReason} onDeleteNote={handleDeleteNote} />
       )}
       {lateDrawer && (
         <LateDrawer title={lateDrawer.title} bookings={lateDrawer.bookings} notes={notes} onClose={() => setLateDrawer(null)} onSelect={(b) => { setLateDrawer(null); setSelectedBooking(b); }} />

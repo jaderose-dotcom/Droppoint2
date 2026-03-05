@@ -45,6 +45,7 @@ export function useDeliveryData() {
     }
 
     setNotes(data.map(n => ({
+      id: n.id,
       bookingRef: n.booking_ref,
       note: n.note,
       author: n.author || 'User',
@@ -81,6 +82,7 @@ export function useDeliveryData() {
     }
 
     setNotes(prev => [...prev, {
+      id: data.id,
       bookingRef: data.booking_ref,
       note: data.note,
       author: data.author,
@@ -88,37 +90,19 @@ export function useDeliveryData() {
     }]);
   }, []);
 
-  const removeNote = useCallback(async (bookingRef, noteText) => {
-    // Find the note in local state to get its timestamp for matching
-    const match = notes.find(n => n.bookingRef === bookingRef && n.note === noteText);
-
-    // Remove from Supabase
-    let query = supabase
+  const deleteNote = useCallback(async (noteId) => {
+    const { error } = await supabase
       .from('delivery_notes')
       .delete()
-      .eq('booking_ref', bookingRef)
-      .eq('note', noteText);
-
-    if (match?.timestamp) {
-      query = query.eq('created_at', match.timestamp);
-    }
-
-    const { error } = await query.limit(1);
+      .eq('id', noteId);
 
     if (error) {
-      console.error('Error removing note:', error);
+      console.error('Error deleting note:', error);
       return;
     }
 
-    // Remove from local state (only first match)
-    setNotes(prev => {
-      const idx = prev.findIndex(n => n.bookingRef === bookingRef && n.note === noteText);
-      if (idx === -1) return prev;
-      const updated = [...prev];
-      updated.splice(idx, 1);
-      return updated;
-    });
-  }, [notes]);
+    setNotes(prev => prev.filter(n => n.id !== noteId));
+  }, []);
 
   // Initial load
   useEffect(() => {
@@ -155,6 +139,7 @@ export function useDeliveryData() {
               return prev;
             }
             return [...prev, {
+              id: n.id,
               bookingRef: n.booking_ref,
               note: n.note,
               author: n.author || 'User',
@@ -163,26 +148,12 @@ export function useDeliveryData() {
           });
         }
       )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'delivery_notes' },
-        (payload) => {
-          const old = payload.old;
-          setNotes(prev => {
-            const idx = prev.findIndex(p => p.timestamp === old.created_at && p.bookingRef === old.booking_ref);
-            if (idx === -1) return prev;
-            const updated = [...prev];
-            updated.splice(idx, 1);
-            return updated;
-          });
-        }
-      )
       .subscribe();
 
     return () => supabase.removeChannel(channel);
   }, []);
 
-  return { deliveries, notes, lastSync, loading, error, addNote, removeNote, refresh: fetchDeliveries };
+  return { deliveries, notes, lastSync, loading, error, addNote, deleteNote, refresh: fetchDeliveries };
 }
 
 // Transform from the delivery_summary view

@@ -1022,6 +1022,14 @@ function DelaysTab({ data, notes, onSelectBooking }) {
 
 // ─── Main Dashboard ───
 export default function Dashboard() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    try { return sessionStorage.getItem('droppoint-auth') === 'true'; } catch(e) { return false; }
+  });
+  const [password, setPassword] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
+  
+  const DASHBOARD_PASSWORD = 'droppoint2026';
+  
   const { deliveries: allData, notes, lastSync, loading, error, addNote, deleteNote } = useDeliveryData();
   const [period, setPeriod] = useState('Month');
   const [currentDate, setCurrentDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -1064,6 +1072,50 @@ export default function Dashboard() {
     { id: 'timing', label: 'Timing Analysis' },
     { id: 'delays', label: 'Delays', badge: delayCount },
   ];
+
+  const handleLogin = () => {
+    if (password === DASHBOARD_PASSWORD) {
+      setIsAuthenticated(true);
+      setPasswordError(false);
+      try { sessionStorage.setItem('droppoint-auth', 'true'); } catch(e) {}
+    } else {
+      setPasswordError(true);
+    }
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: "'Nunito Sans', -apple-system, BlinkMacSystemFont, sans-serif", background: Z2U.lightGrey }}>
+        <div style={{ background: Z2U.white, borderRadius: 16, padding: 40, maxWidth: 380, width: '100%', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', textAlign: 'center' }}>
+          <div style={{ width: 56, height: 56, borderRadius: 14, background: Z2U.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+            <Package size={28} color={Z2U.white} />
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: Z2U.grey, marginBottom: 4 }}>Droppoint Performance</div>
+          <div style={{ fontSize: 13, color: '#9CA3AF', marginBottom: 24 }}>Enter password to access the dashboard</div>
+          <input
+            type="password"
+            value={password}
+            onChange={e => { setPassword(e.target.value); setPasswordError(false); }}
+            onKeyDown={e => { if (e.key === 'Enter') handleLogin(); }}
+            placeholder="Password"
+            style={{
+              width: '100%', padding: '12px 16px', borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box',
+              border: `1px solid ${passwordError ? Z2U.melon : Z2U.medGrey}`,
+              marginBottom: 12,
+            }}
+            autoFocus
+          />
+          {passwordError && <div style={{ fontSize: 12, color: Z2U.melon, marginBottom: 12 }}>Incorrect password</div>}
+          <button onClick={handleLogin} style={{
+            width: '100%', padding: '12px 16px', borderRadius: 10, border: 'none',
+            background: Z2U.blue, color: Z2U.white, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+          }}>
+            Sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

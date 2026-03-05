@@ -944,7 +944,7 @@ function DelaysTab({ data, notes, onSelectBooking }) {
 
 // ─── Main Dashboard ───
 export default function Dashboard() {
-  const { deliveries: allData, notes, lastSync, loading, error, addNote } = useDeliveryData();
+  const { deliveries: allData, notes, lastSync, loading, error, addNote, removeNote } = useDeliveryData();
   const months = useMemo(() => getMonthOptions(allData), [allData]);
   const [currentMonth, setCurrentMonth] = useState(months[months.length - 1] || '');
   const [customer, setCustomer] = useState('All');
@@ -971,70 +971,36 @@ export default function Dashboard() {
       return monthMatch && custMatch;
     });
   }, [allData, currentMonth, customer]);
-  
-  const activeCount = filteredData.filter(d => d.status !== 'Dropped Off' && d.status !== '' && d.status !== 'Tried to deliver').length;
-  const delayCount = filteredData.filter(d => d.status === 'Dropped Off' && d.isLate).length;
+
+  // Adjust data for "Marked as Not Late" overrides
+  const adjustedData = useMemo(() => {
+    const notLateRefs = new Set(
+      notes.filter(n => n.note === 'Marked as Not Late').map(n => n.bookingRef)
+    );
+    if (notLateRefs.size === 0) return filteredData;
+    return filteredData.map(d => {
+      if (notLateRefs.has(d.bookingRef) && d.isLate) {
+        return { ...d, isLate: false, isOnTime: true, delayMins: 0 };
+      }
+      return d;
+    });
+  }, [filteredData, notes]);
+
+  const activeCount = adjustedData.filter(d => d.status !== 'Dropped Off' && d.status !== '' && d.status !== 'Tried to deliver').length;
+  const delayCount = adjustedData.filter(d => d.status === 'Dropped Off' && d.isLate).length;
   
   const handleAddNote = useCallback(async (bookingRef, noteText) => {
-    const newNote = {
-      bookingRef,
-      note: noteText,
-      author: userName || 'User',
-      timestamp: new Date().toISOString(),
-    };
-    setNotes(prev => [...prev, newNote]);
+    await addNote(bookingRef, noteText, userName || 'User');
+  }, [addNote, userName]);
 
-    // Write to storage for persistence
-    try {
-      const existing = await window.storage.get('dashboard-notes');
-      const storedNotes = existing ? JSON.parse(existing.value) : [];
-      storedNotes.push(newNote);
-      await window.storage.set('dashboard-notes', JSON.stringify(storedNotes));
-    } catch (e) {
-      console.log('Storage not available, note saved in session only');
-    }
-  }, [userName]);
-
-  const handleRemoveNote = useCallback((bookingRef, noteText) => {
-    setNotes(prev => {
-      const idx = prev.findIndex(n => n.bookingRef === bookingRef && n.note === noteText);
-      if (idx === -1) return prev;
-      const updated = [...prev];
-      updated.splice(idx, 1);
-      return updated;
-    });
-    // Also remove from storage
-    (async () => {
-      try {
-        const existing = await window.storage.get('dashboard-notes');
-        const stored = existing ? JSON.parse(existing.value) : [];
-        const idx = stored.findIndex(n => n.bookingRef === bookingRef && n.note === noteText);
-        if (idx !== -1) {
-          stored.splice(idx, 1);
-          await window.storage.set('dashboard-notes', JSON.stringify(stored));
-        }
-      } catch (e) { /* storage not available */ }
-    })();
-  }, []);
+  const handleRemoveNote = useCallback(async (bookingRef, noteText) => {
+    await removeNote(bookingRef, noteText);
+  }, [removeNote]);
   
   const handleAssignReason = useCallback((bookingRef, reason) => {
     handleAddNote(bookingRef, `Late Reason: ${reason}`);
   }, [handleAddNote]);
   
-  // Load persisted notes on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const existing = await window.storage.get('dashboard-notes');
-        if (existing) {
-          const storedNotes = JSON.parse(existing.value);
-          setNotes(prev => [...prev, ...storedNotes]);
-        }
-      } catch (e) {
-        // Storage not available
-      }
-    })();
-  }, []);
   
   const tabs = [
     { id: 'overview', label: 'Overview', icon: '📊' },
@@ -1089,18 +1055,18 @@ export default function Dashboard() {
       
       {/* Content */}
       <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto' }}>
-        {activeTab === 'overview' && <OverviewTab data={filteredData} notes={notes} onViewLate={(title, bookings) => setLateDrawer({ title, bookings })} onSelectBooking={setSelectedBooking} />}
-        {activeTab === 'active' && <ActiveBookingsTab data={filteredData} onSelectBooking={setSelectedBooking} />}
-        {(activeTab === 'history' || activeTab === 'speed') && <DeliveryHistoryTab data={filteredData} onSelectBooking={setSelectedBooking} />}
-        {activeTab === 'pickup' && <ByPickupTab data={filteredData} onSelectBooking={setSelectedBooking} />}
-        {activeTab === 'driver' && <ByDriverTab data={filteredData} onSelectBooking={setSelectedBooking} />}
-        {activeTab === 'timing' && <TimingAnalysisTab data={filteredData} />}
-        {activeTab === 'delays' && <DelaysTab data={filteredData} notes={notes} onSelectBooking={setSelectedBooking} />}
+        {activeTab === 'overview' && <OverviewTab data={adjustedData} notes={notes} onViewLate={(title, bookings) => setLateDrawer({ title, bookings })} onSelectBooking={setSelectedBooking} />}
+        {activeTab === 'active' && <ActiveBookingsTab data={adjustedData} onSelectBooking={setSelectedBooking} />}
+        {(activeTab === 'history' || activeTab === 'speed') && <DeliveryHistoryTab data={adjustedData} onSelectBooking={setSelectedBooking} />}
+        {activeTab === 'pickup' && <ByPickupTab data={adjustedData} onSelectBooking={setSelectedBooking} />}
+        {activeTab === 'driver' && <ByDriverTab data={adjustedData} onSelectBooking={setSelectedBooking} />}
+        {activeTab === 'timing' && <TimingAnalysisTab data={adjustedData} />}
+        {activeTab === 'delays' && <DelaysTab data={adjustedData} notes={notes} onSelectBooking={setSelectedBooking} />}
       </div>
       
       {/* Footer */}
       <div style={{ padding: '16px 24px', textAlign: 'center', fontSize: 12, color: '#9CA3AF' }}>
-        Showing {filteredData.length} bookings for {currentMonth ? new Date(currentMonth + '-01').toLocaleDateString('en-AU', { month: 'long', year: 'numeric' }) : 'all time'}
+        Showing {adjustedData.length} bookings for {currentMonth ? new Date(currentMonth + '-01').toLocaleDateString('en-AU', { month: 'long', year: 'numeric' }) : 'all time'}
         {lastSync && <span> · Last synced: {new Date(lastSync.completed_at).toLocaleString('en-AU')}</span>}
       </div>
       

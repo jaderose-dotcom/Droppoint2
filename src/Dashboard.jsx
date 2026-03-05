@@ -46,13 +46,6 @@ function formatSLA(mins) {
   return `${h}h ${m}m`;
 }
 
-function getMonthOptions(data) {
-  const months = new Set();
-  data.forEach(d => {
-    if (d.date) months.add(d.date.substring(0, 7));
-  });
-  return Array.from(months).sort();
-}
 
 // ─── Color Palette (Zoom2u) ───
 const Z2U = {
@@ -158,28 +151,79 @@ function CustomerToggle({ value, onChange }) {
   );
 }
 
-function MonthNavigator({ months, currentMonth, onChange }) {
-  const idx = months.indexOf(currentMonth);
-  const label = currentMonth ? new Date(currentMonth + '-01').toLocaleDateString('en-AU', { month: 'long', year: 'numeric' }) : 'All';
+function MonthNavigator({ allData, period, currentDate, onPeriodChange, onDateChange }) {
+  const getLabel = () => {
+    const d = new Date(currentDate);
+    if (period === 'Day') return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
+    if (period === 'Week') {
+      const start = new Date(d);
+      start.setDate(d.getDate() - d.getDay() + 1); // Monday
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      return `${start.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} – ${end.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    }
+    if (period === 'Month') return d.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
+    if (period === 'Year') return d.getFullYear().toString();
+    return '';
+  };
+
+  const navigate = (direction) => {
+    const d = new Date(currentDate);
+    if (period === 'Day') d.setDate(d.getDate() + direction);
+    else if (period === 'Week') d.setDate(d.getDate() + (7 * direction));
+    else if (period === 'Month') d.setMonth(d.getMonth() + direction);
+    else if (period === 'Year') d.setFullYear(d.getFullYear() + direction);
+    onDateChange(d.toISOString().split('T')[0]);
+  };
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <div style={{ display: 'flex', gap: 0, borderRadius: 8, overflow: 'hidden', border: `1px solid ${Z2U.medGrey}` }}>
         {['Day','Week','Month','Year'].map(p => (
-          <button key={p} style={{
+          <button key={p} onClick={() => onPeriodChange(p)} style={{
             padding: '7px 14px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-            background: p === 'Month' ? Z2U.grey : Z2U.white, color: p === 'Month' ? Z2U.white : Z2U.grey,
+            background: p === period ? Z2U.grey : Z2U.white, color: p === period ? Z2U.white : Z2U.grey,
+            transition: 'all 0.15s',
           }}>{p}</button>
         ))}
       </div>
-      <button onClick={() => idx > 0 && onChange(months[idx-1])} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+      <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
         <ChevronLeft size={18} color={Z2U.grey} />
       </button>
-      <span style={{ fontSize: 14, fontWeight: 600, color: Z2U.grey, minWidth: 130, textAlign: 'center' }}>{label}</span>
-      <button onClick={() => idx < months.length - 1 && onChange(months[idx+1])} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+      <span style={{ fontSize: 14, fontWeight: 600, color: Z2U.grey, minWidth: 180, textAlign: 'center' }}>{getLabel()}</span>
+      <button onClick={() => navigate(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
         <ChevronRight size={18} color={Z2U.grey} />
       </button>
     </div>
   );
+}
+
+function filterByPeriod(data, period, currentDate) {
+  const d = new Date(currentDate);
+  return data.filter(item => {
+    if (!item.date) return false;
+    const itemDate = new Date(item.date);
+    
+    if (period === 'Day') {
+      return itemDate.toISOString().split('T')[0] === d.toISOString().split('T')[0];
+    }
+    if (period === 'Week') {
+      const start = new Date(d);
+      start.setDate(d.getDate() - d.getDay() + 1); // Monday
+      start.setHours(0,0,0,0);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      end.setHours(23,59,59,999);
+      return itemDate >= start && itemDate <= end;
+    }
+    if (period === 'Month') {
+      return itemDate.getFullYear() === d.getFullYear() && itemDate.getMonth() === d.getMonth();
+    }
+    if (period === 'Year') {
+      return itemDate.getFullYear() === d.getFullYear();
+    }
+    return true;
+  });
 }
 
 // ─── Booking Detail Modal ───
@@ -979,8 +1023,8 @@ function DelaysTab({ data, notes, onSelectBooking }) {
 // ─── Main Dashboard ───
 export default function Dashboard() {
   const { deliveries: allData, notes, lastSync, loading, error, addNote, deleteNote } = useDeliveryData();
-  const months = useMemo(() => getMonthOptions(allData), [allData]);
-  const [currentMonth, setCurrentMonth] = useState(months[months.length - 1] || '');
+  const [period, setPeriod] = useState('Month');
+  const [currentDate, setCurrentDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [customer, setCustomer] = useState('All');
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedBooking, setSelectedBooking] = useState(null);
@@ -988,12 +1032,12 @@ export default function Dashboard() {
   
   // Filter data
   const filteredData = useMemo(() => {
-    return allData.filter(d => {
-      const monthMatch = !currentMonth || (d.date && d.date.startsWith(currentMonth));
+    const periodFiltered = filterByPeriod(allData, period, currentDate);
+    return periodFiltered.filter(d => {
       const custMatch = customer === 'All' || d.customer === customer;
-      return monthMatch && custMatch;
+      return custMatch;
     });
-  }, [allData, currentMonth, customer]);
+  }, [allData, period, currentDate, customer]);
   
   const activeCount = filteredData.filter(d => d.status !== 'Dropped Off' && d.status !== '' && d.status !== 'Tried to deliver').length;
   const delayCount = filteredData.filter(d => d.status === 'Dropped Off' && d.isLate).length;
@@ -1049,7 +1093,7 @@ export default function Dashboard() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <CustomerToggle value={customer} onChange={setCustomer} />
-            <MonthNavigator months={months} currentMonth={currentMonth} onChange={setCurrentMonth} />
+            <MonthNavigator allData={allData} period={period} currentDate={currentDate} onPeriodChange={setPeriod} onDateChange={setCurrentDate} />
           </div>
         </div>
       </div>
@@ -1074,7 +1118,7 @@ export default function Dashboard() {
       
       {/* Footer */}
       <div style={{ padding: '16px 24px', textAlign: 'center', fontSize: 12, color: '#9CA3AF' }}>
-        Showing {filteredData.length} bookings for {currentMonth ? new Date(currentMonth + '-01').toLocaleDateString('en-AU', { month: 'long', year: 'numeric' }) : 'all time'}
+        Showing {filteredData.length} bookings for {new Date(currentDate).toLocaleDateString('en-AU', period === 'Year' ? { year: 'numeric' } : period === 'Day' ? { day: 'numeric', month: 'long', year: 'numeric' } : { month: 'long', year: 'numeric' })}
         {lastSync && <span> · Last synced: {new Date(lastSync.completed_at).toLocaleString('en-AU')}</span>}
       </div>
       

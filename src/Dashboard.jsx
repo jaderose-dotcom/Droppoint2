@@ -199,19 +199,25 @@ function MonthNavigator({ allData, period, currentDate, onPeriodChange, onDateCh
 }
 
 function filterByPeriod(data, period, currentDate) {
-  const d = new Date(currentDate);
+  const d = new Date(currentDate + 'T12:00:00'); // noon to avoid timezone edge issues
   return data.filter(item => {
     // Use requested pickup date for grouping (delivery day), fall back to booking date
     const dateStr = item.requestedPickup || item.requestedDrop || item.date;
     if (!dateStr) return false;
     const itemDate = new Date(dateStr);
     
+    // Compare using local date parts (AEST) not UTC
+    const itemDay = itemDate.getDate();
+    const itemMonth = itemDate.getMonth();
+    const itemYear = itemDate.getFullYear();
+    const itemDayOfWeek = itemDate.getDay();
+    
     if (period === 'Day') {
-      return itemDate.toISOString().split('T')[0] === d.toISOString().split('T')[0];
+      return itemDay === d.getDate() && itemMonth === d.getMonth() && itemYear === d.getFullYear();
     }
     if (period === 'Week') {
       const start = new Date(d);
-      start.setDate(d.getDate() - d.getDay() + 1); // Monday
+      start.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Monday
       start.setHours(0,0,0,0);
       const end = new Date(start);
       end.setDate(start.getDate() + 6);
@@ -219,10 +225,10 @@ function filterByPeriod(data, period, currentDate) {
       return itemDate >= start && itemDate <= end;
     }
     if (period === 'Month') {
-      return itemDate.getFullYear() === d.getFullYear() && itemDate.getMonth() === d.getMonth();
+      return itemYear === d.getFullYear() && itemMonth === d.getMonth();
     }
     if (period === 'Year') {
-      return itemDate.getFullYear() === d.getFullYear();
+      return itemYear === d.getFullYear();
     }
     return true;
   });

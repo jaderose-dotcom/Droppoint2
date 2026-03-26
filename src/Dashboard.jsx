@@ -63,6 +63,7 @@ const LATE_REASONS = [
   'Allocation Issues – Driver',
   'No PPE – Driver',
   'Poor Time Management – Driver',
+  'Traffic/Parking',
   'FBAU Requested Change of Address/ETA/SLA',
   'Missing or Incorrect Order Details',
   'Driver Held Up at Delivery Site',
@@ -81,9 +82,10 @@ const LATE_REASONS = [
 ];
 
 const LATE_REASON_DESCRIPTIONS = {
-  'Allocation Issues – Driver': 'Issues associated with driver allocation that impacts the end-to-end in transit time.',
+  'Allocation Issues – Driver': 'Driver allocation delay, capacity/availability, collected multiple jobs, IT issues.',
   'No PPE – Driver': 'Driver refused entry at collection point – no PPE.',
   'Poor Time Management – Driver': 'Driver took longer than required at individual stops without operational justification.',
+  'Traffic/Parking': 'Regular traffic or parking issues — not driver fault but not force majeure. Applies to deliveries <10 min late and >20 km.',
   'FBAU Requested Change of Address/ETA/SLA': 'FBAU requested a change of address, updated ETA, or updated SLA.',
   'Missing or Incorrect Order Details': 'Incorrect information on consignment resulting in incorrect, inaccurate, or delayed delivery.',
   'Driver Held Up at Delivery Site': 'Driver held up or left waiting at handover point for receiver.',
@@ -94,11 +96,33 @@ const LATE_REASON_DESCRIPTIONS = {
   'Booking Request Cancelled': 'Booking request cancelled by FBAU team.',
   'Late Booking Request': 'Booking request lodged outside of agreed operating hours.',
   'FBAU System Issue (Incl DBS)': 'Systems failure relating to FBAU and/or DBS systems.',
-  'Force Majeure': 'Fire, flood, terrorism, earthquake, public health warning, severe storm, cyclone.',
+  'Force Majeure': 'Fire, flood, terrorism, earthquake, public health warning, severe storm/cyclone.',
   'Labelling Error': 'Incorrect, missing, or damaged labels affixed to consignment.',
   'Public Holiday': 'National or state-based public holiday delaying pickup or dispatch.',
-  'Weather Delay': 'Weather-related delay not considered a natural disaster but still impacting delivery.',
+  'Weather Delay': 'Weather-related delay not considered a natural disaster but still impacting delivery timeframes.',
   'Traffic Incident': 'Incidents outside regular traffic hazards impacting the ability to meet delivery timeframes.',
+};
+
+const LATE_REASON_STATUS = {
+  'Allocation Issues – Driver': 'Controllable',
+  'No PPE – Driver': 'Controllable',
+  'Poor Time Management – Driver': 'Controllable',
+  'Traffic/Parking': 'Controllable',
+  'FBAU Requested Change of Address/ETA/SLA': 'Uncontrollable',
+  'Missing or Incorrect Order Details': 'Uncontrollable',
+  'Driver Held Up at Delivery Site': 'Uncontrollable',
+  'Delayed Departure from Pickup Site': 'Uncontrollable',
+  'Delivery Rejected / Driver Access Issues': 'Uncontrollable',
+  'Damaged on Dispatch': 'Uncontrollable',
+  'Delay at Pickup': 'Uncontrollable',
+  'Booking Request Cancelled': 'Uncontrollable',
+  'Late Booking Request': 'Uncontrollable',
+  'FBAU System Issue (Incl DBS)': 'Uncontrollable',
+  'Force Majeure': 'Uncontrollable',
+  'Labelling Error': 'Uncontrollable',
+  'Public Holiday': 'Uncontrollable',
+  'Weather Delay': 'Uncontrollable',
+  'Traffic Incident': 'Uncontrollable',
 };
 
 // ─── Components ───
@@ -355,14 +379,32 @@ function BookingModal({ booking, notes, onClose, onAddNote, onAssignReason, onDe
               )}
               
               {showReasons && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 280, overflowY: 'auto', paddingRight: 4 }}>
-                  {LATE_REASONS.map(reason => (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 340, overflowY: 'auto', paddingRight: 4 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: Z2U.melon, textTransform: 'uppercase', letterSpacing: 1, padding: '8px 0 4px', position: 'sticky', top: 0, background: Z2U.white }}>Controllable</div>
+                  {LATE_REASONS.filter(r => LATE_REASON_STATUS[r] === 'Controllable').map(reason => (
                     <button key={reason} onClick={() => { onAssignReason(b.bookingRef, reason); setShowReasons(false); }}
                       style={{ padding: '8px 14px', borderRadius: 10, border: `1px solid ${Z2U.medGrey}`, background: Z2U.white, color: Z2U.grey, cursor: 'pointer', fontSize: 12, fontWeight: 500, transition: 'all 0.15s', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 2 }}
                       onMouseOver={e => { e.currentTarget.style.background = Z2U.melon + '10'; e.currentTarget.style.borderColor = Z2U.melon; }}
                       onMouseOut={e => { e.currentTarget.style.background = Z2U.white; e.currentTarget.style.borderColor = Z2U.medGrey; }}
                     >
-                      <span style={{ fontWeight: 600, fontSize: 12 }}>{reason}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                        <span style={{ fontWeight: 600, fontSize: 12 }}>{reason}</span>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: Z2U.melon, background: Z2U.melon + '15', padding: '1px 6px', borderRadius: 8 }}>Controllable</span>
+                      </div>
+                      {LATE_REASON_DESCRIPTIONS[reason] && <span style={{ fontSize: 11, color: '#9CA3AF', lineHeight: 1.3 }}>{LATE_REASON_DESCRIPTIONS[reason]}</span>}
+                    </button>
+                  ))}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: Z2U.blue, textTransform: 'uppercase', letterSpacing: 1, padding: '12px 0 4px', position: 'sticky', top: 0, background: Z2U.white }}>Uncontrollable</div>
+                  {LATE_REASONS.filter(r => LATE_REASON_STATUS[r] === 'Uncontrollable').map(reason => (
+                    <button key={reason} onClick={() => { onAssignReason(b.bookingRef, reason); setShowReasons(false); }}
+                      style={{ padding: '8px 14px', borderRadius: 10, border: `1px solid ${Z2U.medGrey}`, background: Z2U.white, color: Z2U.grey, cursor: 'pointer', fontSize: 12, fontWeight: 500, transition: 'all 0.15s', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 2 }}
+                      onMouseOver={e => { e.currentTarget.style.background = Z2U.blue + '10'; e.currentTarget.style.borderColor = Z2U.blue; }}
+                      onMouseOut={e => { e.currentTarget.style.background = Z2U.white; e.currentTarget.style.borderColor = Z2U.medGrey; }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                        <span style={{ fontWeight: 600, fontSize: 12 }}>{reason}</span>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: Z2U.blue, background: Z2U.blue + '15', padding: '1px 6px', borderRadius: 8 }}>Uncontrollable</span>
+                      </div>
                       {LATE_REASON_DESCRIPTIONS[reason] && <span style={{ fontSize: 11, color: '#9CA3AF', lineHeight: 1.3 }}>{LATE_REASON_DESCRIPTIONS[reason]}</span>}
                     </button>
                   ))}
@@ -1060,13 +1102,27 @@ function DelaysTab({ data, notes, onSelectBooking }) {
       
       {Object.keys(reasonCounts).length > 0 && (
         <div style={{ background: Z2U.white, borderRadius: 12, padding: 20, border: `1px solid ${Z2U.medGrey}`, marginBottom: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: Z2U.grey, marginBottom: 12 }}>Assigned late reasons</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {Object.entries(reasonCounts).sort((a, b) => b[1] - a[1]).map(([reason, count]) => (
-              <span key={reason} style={{ padding: '6px 14px', borderRadius: 20, background: Z2U.melon + '15', color: Z2U.melon, fontSize: 12, fontWeight: 600 }}>
-                {reason} ({count})
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: Z2U.grey }}>Assigned late reasons</div>
+            <div style={{ display: 'flex', gap: 12, fontSize: 12 }}>
+              <span style={{ color: Z2U.melon, fontWeight: 600 }}>
+                Controllable: {Object.entries(reasonCounts).filter(([r]) => LATE_REASON_STATUS[r] === 'Controllable').reduce((s, [, c]) => s + c, 0)}
               </span>
-            ))}
+              <span style={{ color: Z2U.blue, fontWeight: 600 }}>
+                Uncontrollable: {Object.entries(reasonCounts).filter(([r]) => LATE_REASON_STATUS[r] === 'Uncontrollable').reduce((s, [, c]) => s + c, 0)}
+              </span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {Object.entries(reasonCounts).sort((a, b) => b[1] - a[1]).map(([reason, count]) => {
+              const isControllable = LATE_REASON_STATUS[reason] === 'Controllable';
+              const color = isControllable ? Z2U.melon : Z2U.blue;
+              return (
+                <span key={reason} style={{ padding: '6px 14px', borderRadius: 20, background: color + '15', color: color, fontSize: 12, fontWeight: 600 }}>
+                  {reason} ({count})
+                </span>
+              );
+            })}
           </div>
         </div>
       )}

@@ -1002,13 +1002,15 @@ function DelaysTab({ data, notes, onSelectBooking }) {
   });
 
   const downloadCSV = () => {
-    const headers = [
-      'Booking Ref', 'PO', 'Date', 'Speed', 'Courier', 'State',
-      'Distance (km)', 'SLA', 'Booked Hour', 'Expected Delivery',
-      'Actual Delivery', 'Delay (mins)', 'Late Reason',
-      'Pickup Address', 'Drop Address', 'Customer',
-      'Booking → Pickup (mins)', 'Pickup → Delivery (mins)', 'Notes'
-    ];
+    const headers = ['Booking Ref', 'PO', 'Date', 'Speed', 'Distance (km)', 'SLA', 'Minutes Late', 'Courier', 'Late Reason', 'Notes'];
+
+    const escapeCSV = (val) => {
+      const str = String(val == null ? '' : val);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return '"' + str.replace(/"/g, '""') + '"';
+      }
+      return str;
+    };
 
     const rows = filtered.map(b => {
       const reason = reasonByBooking[b.bookingRef] || '';
@@ -1022,26 +1024,17 @@ function DelaysTab({ data, notes, onSelectBooking }) {
         b.po,
         b.requestedPickup ? new Date(b.requestedPickup).toLocaleDateString('en-AU') : formatDate(b.date),
         b.speed,
-        b.courier,
-        b.state,
         b.distanceKm,
         b.speed === 'Same day' ? 'By drop time' : b.slaMins,
-        b.hour,
-        b.expectedDelivery ? b.expectedDelivery.toLocaleString('en-AU') : '',
-        b.dropActual ? new Date(b.dropActual).toLocaleString('en-AU') : '',
         Math.round(b.delayMins),
+        b.courier,
         reason,
-        `"${(b.pickupAddress || '').replace(/"/g, '""')}"`,
-        `"${(b.dropAddress || '').replace(/"/g, '""')}"`,
-        b.customer,
-        b.bookingToPickup !== null ? Math.round(b.bookingToPickup) : '',
-        b.pickupToDeliveryMins !== null ? Math.round(b.pickupToDeliveryMins) : '',
-        `"${bookingNotes.replace(/"/g, '""')}"`,
-      ];
+        bookingNotes,
+      ].map(escapeCSV);
     });
 
     const csvContent = [
-      headers.join(','),
+      headers.map(escapeCSV).join(','),
       ...rows.map(r => r.join(','))
     ].join('\n');
 

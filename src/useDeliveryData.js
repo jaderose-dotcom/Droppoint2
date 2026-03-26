@@ -177,9 +177,9 @@ function transformViewDeliveries(data) {
     customer: d.customer || classifyCustomer(d.po),
     slaMins: d.sla_mins || calcSLA(d.speed, d.distance_km),
     expectedDelivery: d.expected_delivery ? new Date(d.expected_delivery) : calcExpectedDelivery(d),
-    isLate: d.is_late || false,
-    isOnTime: d.status === 'Dropped Off' && !(d.is_late || false),
-    delayMins: d.delay_mins ? Math.max(0, parseFloat(d.delay_mins)) : 0,
+    isLate: d.is_late && parseFloat(d.delay_mins) > 1,
+    isOnTime: d.status === 'Dropped Off' && !(d.is_late && parseFloat(d.delay_mins) > 1),
+    delayMins: d.delay_mins && parseFloat(d.delay_mins) > 1 ? Math.max(0, parseFloat(d.delay_mins)) : 0,
     pickupToDeliveryMins: calcPickupToDelivery(d.drop_actual, d.requested_pickup),
     bookingToPickup: calcBookingToPickup(d.requested_pickup, d.date, d.hour),
   }));
@@ -196,7 +196,7 @@ function transformRawDeliveries(data) {
 
     if (d.status === 'Dropped Off' && actualDrop && expectedDelivery) {
       delayMins = (actualDrop - expectedDelivery) / 60000;
-      isLate = delayMins > 0;
+      isLate = delayMins > 1;
     }
 
     return {

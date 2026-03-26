@@ -983,10 +983,15 @@ function DelaysTab({ data, notes, onSelectBooking }) {
   
   // Group by reason from notes
   const reasonCounts = {};
+  const reasonByBooking = {};
   notes.forEach(n => {
     if (n.note.startsWith('Late Reason:')) {
       const reason = n.note.replace('Late Reason:', '').trim();
       reasonCounts[reason] = (reasonCounts[reason] || 0) + 1;
+      reasonByBooking[n.bookingRef] = reason;
+    }
+    if (n.note === 'Marked as Not Late') {
+      reasonByBooking[n.bookingRef] = 'Marked as Not Late';
     }
   });
   
@@ -995,6 +1000,62 @@ function DelaysTab({ data, notes, onSelectBooking }) {
     const s = search.toLowerCase();
     return !s || b.bookingRef.toLowerCase().includes(s) || b.po.toLowerCase().includes(s) || b.courier.toLowerCase().includes(s);
   });
+
+  const downloadCSV = () => {
+    const headers = [
+      'Booking Ref', 'PO', 'Date', 'Speed', 'Courier', 'State',
+      'Distance (km)', 'SLA', 'Booked Hour', 'Expected Delivery',
+      'Actual Delivery', 'Delay (mins)', 'Late Reason',
+      'Pickup Address', 'Drop Address', 'Customer',
+      'Booking → Pickup (mins)', 'Pickup → Delivery (mins)', 'Notes'
+    ];
+
+    const rows = filtered.map(b => {
+      const reason = reasonByBooking[b.bookingRef] || '';
+      const bookingNotes = notes
+        .filter(n => n.bookingRef === b.bookingRef && !n.note.startsWith('Late Reason:') && n.note !== 'Marked as Not Late')
+        .map(n => `${n.author}: ${n.note}`)
+        .join(' | ');
+      
+      return [
+        b.bookingRef,
+        b.po,
+        b.requestedPickup ? new Date(b.requestedPickup).toLocaleDateString('en-AU') : formatDate(b.date),
+        b.speed,
+        b.courier,
+        b.state,
+        b.distanceKm,
+        b.speed === 'Same day' ? 'By drop time' : b.slaMins,
+        b.hour,
+        b.expectedDelivery ? b.expectedDelivery.toLocaleString('en-AU') : '',
+        b.dropActual ? new Date(b.dropActual).toLocaleString('en-AU') : '',
+        Math.round(b.delayMins),
+        reason,
+        `"${(b.pickupAddress || '').replace(/"/g, '""')}"`,
+        `"${(b.dropAddress || '').replace(/"/g, '""')}"`,
+        b.customer,
+        b.bookingToPickup !== null ? Math.round(b.bookingToPickup) : '',
+        b.pickupToDeliveryMins !== null ? Math.round(b.pickupToDeliveryMins) : '',
+        `"${bookingNotes.replace(/"/g, '""')}"`,
+      ];
+    });
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.join(','))
+    ].join('\n');
+
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const dateStr = new Date().toISOString().split('T')[0];
+    link.download = `late_deliveries_${dateStr}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div>
@@ -1017,10 +1078,18 @@ function DelaysTab({ data, notes, onSelectBooking }) {
         </div>
       )}
       
-      <div style={{ position: 'relative', marginBottom: 16 }}>
-        <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search delays..."
-          style={{ width: '100%', padding: '10px 14px 10px 40px', borderRadius: 10, border: `1px solid ${Z2U.medGrey}`, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF' }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search delays..."
+            style={{ width: '100%', padding: '10px 14px 10px 40px', borderRadius: 10, border: `1px solid ${Z2U.medGrey}`, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+        </div>
+        <button onClick={downloadCSV} style={{
+          padding: '10px 20px', borderRadius: 10, border: 'none', background: Z2U.blue, color: Z2U.white,
+          cursor: 'pointer', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+        }}>
+          <FileText size={15} /> Export CSV
+        </button>
       </div>
       
       <BookingTable bookings={filtered} onSelect={onSelectBooking} />

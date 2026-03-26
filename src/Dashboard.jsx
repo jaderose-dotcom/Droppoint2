@@ -320,7 +320,7 @@ function BookingModal({ booking, notes, onClose, onAddNote, onAssignReason, onDe
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
             <DetailCell label="Distance" value={`${b.distanceKm} km`} />
-            <DetailCell label="Booked" value={`${b.hour}:00`} />
+            <DetailCell label="Booked" value={b.requestedPickup ? formatTime(b.requestedPickup) : `${b.hour}:00`} />
             <DetailCell label="SLA" value={b.speed === 'Same day' ? 'By drop time' : formatSLA(b.slaMins)} />
             <DetailCell label="State" value={b.state} />
           </div>
@@ -527,7 +527,7 @@ function LateDrawer({ title, bookings, notes, onClose, onSelect }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, fontSize: 12 }}>
                 <div><span style={{ color: '#9CA3AF' }}>Courier: </span><span style={{ color: Z2U.grey, fontWeight: 500 }}>{b.courier || '—'}</span></div>
                 <div><span style={{ color: '#9CA3AF' }}>Distance: </span><span style={{ color: Z2U.grey, fontWeight: 500 }}>{b.distanceKm} km</span></div>
-                <div><span style={{ color: '#9CA3AF' }}>Booked: </span><span style={{ color: Z2U.grey, fontWeight: 500 }}>{b.hour}:00</span></div>
+                <div><span style={{ color: '#9CA3AF' }}>Booked: </span><span style={{ color: Z2U.grey, fontWeight: 500 }}>{b.requestedPickup ? formatTime(b.requestedPickup) : `${b.hour}:00`}</span></div>
                 <div><span style={{ color: '#9CA3AF' }}>SLA: </span><span style={{ color: Z2U.grey, fontWeight: 500 }}>{b.speed === 'Same day' ? 'By drop' : formatSLA(b.slaMins)}</span></div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, fontSize: 12, marginTop: 6 }}>

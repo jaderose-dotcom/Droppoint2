@@ -668,7 +668,7 @@ function OverviewTab({ data, notes, onViewLate, onSelectBooking }) {
 }
 
 function ActiveBookingsTab({ data, onSelectBooking }) {
-  const active = data.filter(d => d.status !== 'Dropped Off' && d.status !== '' && d.status !== 'Tried to deliver');
+  const active = data.filter(d => d.status !== 'Dropped Off' && d.status !== '' && d.status !== 'Tried to deliver' && d.status !== 'Cancelled' && d.status !== 'Returned' && d.status !== 'cancelled' && d.status !== 'returned');
   const now = new Date();
   
   // Sort: overdue first, then by expected delivery
@@ -1216,7 +1216,7 @@ export default function Dashboard() {
     });
   }, [allData, period, currentDate, customer]);
   
-  const activeCount = filteredData.filter(d => d.status !== 'Dropped Off' && d.status !== '' && d.status !== 'Tried to deliver').length;
+  const activeCount = filteredData.filter(d => d.status !== 'Dropped Off' && d.status !== '' && d.status !== 'Tried to deliver' && d.status !== 'Cancelled' && d.status !== 'Returned' && d.status !== 'cancelled' && d.status !== 'returned').length;
   const delayCount = filteredData.filter(d => d.status === 'Dropped Off' && d.isLate).length;
   
   const handleAddNote = useCallback(async (bookingRef, noteText, author) => {

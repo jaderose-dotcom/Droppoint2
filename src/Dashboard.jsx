@@ -669,31 +669,74 @@ function OverviewTab({ data, notes, onViewLate, onSelectBooking }) {
 
 function ActiveBookingsTab({ data, onSelectBooking }) {
   const active = data.filter(d => d.status !== 'Dropped Off' && d.status !== '' && d.status !== 'Tried to deliver');
+  const now = new Date();
+  
+  // Sort: overdue first, then by expected delivery
+  const sorted = [...active].sort((a, b) => {
+    const aOverdue = a.expectedDelivery && now > a.expectedDelivery;
+    const bOverdue = b.expectedDelivery && now > b.expectedDelivery;
+    if (aOverdue && !bOverdue) return -1;
+    if (!aOverdue && bOverdue) return 1;
+    if (a.expectedDelivery && b.expectedDelivery) return a.expectedDelivery - b.expectedDelivery;
+    return 0;
+  });
+
+  const overdueCount = sorted.filter(b => b.expectedDelivery && now > b.expectedDelivery).length;
+
   return (
     <div>
-      <div style={{ marginBottom: 16, fontSize: 14, color: '#9CA3AF' }}>{active.length} active bookings</div>
-      {active.length === 0 ? (
+      <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
+        <StatCard icon={Package} label="Active bookings" value={active.length} color={Z2U.blue} />
+        {overdueCount > 0 && <StatCard icon={AlertTriangle} label="Overdue" value={overdueCount} sub="Past expected delivery" color={Z2U.melon} />}
+      </div>
+      {sorted.length === 0 ? (
         <div style={{ background: Z2U.white, borderRadius: 12, padding: 40, textAlign: 'center', color: '#9CA3AF', border: `1px solid ${Z2U.medGrey}` }}>No active bookings at this time</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {active.map(b => (
-            <div key={b.bookingRef} onClick={() => onSelectBooking(b)} style={{ background: Z2U.white, borderRadius: 12, padding: 16, border: `1px solid ${Z2U.medGrey}`, cursor: 'pointer', transition: 'all 0.15s' }}
-              onMouseOver={e => e.currentTarget.style.borderColor = Z2U.blue}
-              onMouseOut={e => e.currentTarget.style.borderColor = Z2U.medGrey}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: Z2U.blue }}>{b.bookingRef}</span>
-                  <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700, background: b.speed === 'VIP' ? Z2U.melon : b.speed === '3 hour' ? Z2U.blue : Z2U.yellow, color: Z2U.white }}>{b.speed}</span>
+          {sorted.map(b => {
+            const isOverdue = b.expectedDelivery && now > b.expectedDelivery;
+            const minsOverdue = isOverdue ? Math.round((now - b.expectedDelivery) / 60000) : 0;
+            const minsRemaining = !isOverdue && b.expectedDelivery ? Math.round((b.expectedDelivery - now) / 60000) : null;
+            
+            return (
+              <div key={b.bookingRef} onClick={() => onSelectBooking(b)} 
+                style={{ background: Z2U.white, borderRadius: 12, padding: 16, border: `2px solid ${isOverdue ? Z2U.melon : Z2U.medGrey}`, cursor: 'pointer', transition: 'all 0.15s' }}
+                onMouseOver={e => e.currentTarget.style.borderColor = isOverdue ? Z2U.melon : Z2U.blue}
+                onMouseOut={e => e.currentTarget.style.borderColor = isOverdue ? Z2U.melon : Z2U.medGrey}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: Z2U.blue }}>{b.bookingRef}</span>
+                    <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700, background: b.speed === 'VIP' ? Z2U.melon : b.speed === '3 hour' ? Z2U.blue : Z2U.yellow, color: Z2U.white }}>{b.speed}</span>
+                    {isOverdue && (
+                      <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700, background: Z2U.melon, color: Z2U.white }}>
+                        OVERDUE +{formatMins(minsOverdue).substring(1)}
+                      </span>
+                    )}
+                    {!isOverdue && minsRemaining !== null && minsRemaining <= 30 && (
+                      <span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700, background: Z2U.yellow + '20', color: Z2U.yellow, border: `1px solid ${Z2U.yellow}` }}>
+                        {minsRemaining}m remaining
+                      </span>
+                    )}
+                  </div>
+                  <StatusBadge status={b.status} />
                 </div>
-                <StatusBadge status={b.status} />
+                <div style={{ marginTop: 10, fontSize: 12, color: '#9CA3AF', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 8 }}>
+                  <span>Courier: <strong style={{ color: Z2U.grey }}>{b.courier || '—'}</strong></span>
+                  <span>State: <strong style={{ color: Z2U.grey }}>{b.state}</strong></span>
+                  <span>SLA: <strong style={{ color: Z2U.grey }}>{b.speed === 'Same day' ? 'By drop time' : formatSLA(b.slaMins)}</strong></span>
+                  <span>Expected: <strong style={{ color: isOverdue ? Z2U.melon : Z2U.grey }}>{b.expectedDelivery ? formatTime(b.expectedDelivery.toISOString()) : '—'}</strong></span>
+                  <span>Pickup: <strong style={{ color: Z2U.grey }}>{b.requestedPickup ? formatTime(b.requestedPickup) : '—'}</strong></span>
+                </div>
+                <div style={{ marginTop: 6, fontSize: 12, color: '#9CA3AF', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 8 }}>
+                  <span>PO: <strong style={{ color: Z2U.grey }}>{b.po || '—'}</strong></span>
+                  <span>Distance: <strong style={{ color: Z2U.grey }}>{b.distanceKm} km</strong></span>
+                  <span>Customer: <strong style={{ color: Z2U.grey }}>{b.customer}</strong></span>
+                  <span>Date: <strong style={{ color: Z2U.grey }}>{formatDate(b.date)}</strong></span>
+                  <span></span>
+                </div>
               </div>
-              <div style={{ marginTop: 8, fontSize: 12, color: '#9CA3AF', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                <span>Courier: <strong style={{ color: Z2U.grey }}>{b.courier || '—'}</strong></span>
-                <span>State: <strong style={{ color: Z2U.grey }}>{b.state}</strong></span>
-                <span>Date: <strong style={{ color: Z2U.grey }}>{formatDate(b.date)}</strong></span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
